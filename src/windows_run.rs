@@ -44,13 +44,14 @@
 
             let settings = Settings::load();
             let light_theme = effective_light_theme(settings);
-            let visuals = match build_visuals(&source_frames, &source_sleep, light_theme, settings) {
-                Ok(visuals) => visuals,
-                Err(error) => {
-                    GdiplusShutdown(gdiplus_token);
-                    return Err(error);
-                }
-            };
+            let visuals =
+                match build_visuals(&source_frames, &source_sleep, light_theme, settings) {
+                    Ok(visuals) => visuals,
+                    Err(error) => {
+                        GdiplusShutdown(gdiplus_token);
+                        return Err(error);
+                    }
+                };
 
             let instance = GetModuleHandleW(null());
             if instance == 0 {
@@ -82,7 +83,7 @@
             let settings_class_name = wide("CatCPU.SettingsWindow");
             let settings_class = WndClassW {
                 style: 0,
-                wnd_proc: Some(settings_wnd_proc),
+                wnd_proc: Some(mica_settings_wnd_proc),
                 cls_extra: 0,
                 wnd_extra: 0,
                 instance,
@@ -118,8 +119,18 @@
             }
 
             let hwnd = CreateWindowExW(
-                0, class_name.as_ptr(), window_name.as_ptr(), 0,
-                0, 0, 0, 0, 0, 0, instance, null_mut(),
+                0,
+                class_name.as_ptr(),
+                window_name.as_ptr(),
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                instance,
+                null_mut(),
             );
             if hwnd == 0 {
                 destroy_visuals(&visuals);
@@ -128,9 +139,22 @@
             }
 
             let overlay_hwnd = CreateWindowExW(
-                WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE,
-                overlay_class_name.as_ptr(), window_name.as_ptr(), WS_POPUP,
-                0, 0, 1, 1, 0, 0, instance, null_mut(),
+                WS_EX_LAYERED
+                    | WS_EX_TRANSPARENT
+                    | WS_EX_TOOLWINDOW
+                    | WS_EX_TOPMOST
+                    | WS_EX_NOACTIVATE,
+                overlay_class_name.as_ptr(),
+                window_name.as_ptr(),
+                WS_POPUP,
+                0,
+                0,
+                1,
+                1,
+                0,
+                0,
+                instance,
+                null_mut(),
             );
             if overlay_hwnd == 0 {
                 DestroyWindow(hwnd);
@@ -259,7 +283,12 @@
             unsafe {
                 let message = wide(error);
                 let title = wide("CatCPU");
-                MessageBoxW(0, message.as_ptr(), title.as_ptr(), MB_OK | MB_ICONWARNING);
+                MessageBoxW(
+                    0,
+                    message.as_ptr(),
+                    title.as_ptr(),
+                    MB_OK | MB_ICONWARNING,
+                );
             }
         }
     }

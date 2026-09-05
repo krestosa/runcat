@@ -1,6 +1,6 @@
 [package]
 name = "catcpu"
-version = "0.5.0"
+version = "0.5.1"
 edition = "2021"
 description = "Lightweight native Windows tray cat whose animation follows CPU load"
 license = "MIT"
