@@ -38,7 +38,7 @@ Right-click the cat and choose **Settings...**. Changes apply without restarting
 - Large overlay mode: on/off.
 - Live CPU, RAM, power and running/sleeping status.
 
-Windows controls the physical size of notification-area icons. Values above 32 px therefore keep the tray icon at the largest size Windows accepts. Enable **Large overlay** to render the cat physically at 33-64 px just above the taskbar while keeping the tray icon available for controls.
+Windows controls the physical size of notification-area icons. Values above 32 px therefore keep the tray icon at the largest size Windows accepts. Enable **Large overlay** to render the cat physically at 33-64 px just above the taskbar while keeping the tray icon available for controls. The overlay is click-through and does not take focus from other windows.
 
 The right-click menu includes common speed, size and threshold presets; custom values configured in the settings window remain valid.
 
