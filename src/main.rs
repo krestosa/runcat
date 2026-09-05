@@ -10,21 +10,17 @@ mod windows_app {
     use std::ffi::c_void;
     use std::fs;
     use std::mem::{size_of, zeroed};
-    use std::path::PathBuf;
+    use std::os::windows::ffi::OsStrExt;
+    use std::path::{Path, PathBuf};
     use std::ptr::{copy_nonoverlapping, null, null_mut};
     use std::sync::{Mutex, OnceLock};
 
-    include!("windows_ffi_a.rs");
-    include!("windows_ffi_b.rs");
-    include!("windows_ffi_c.rs");
-    include!("windows_features.rs");
-    include!("windows_core_a.rs");
-    include!("windows_core_b.rs");
-    include!("windows_core_c.rs");
-    include!("windows_settings_a.rs");
-    include!("windows_settings_b.rs");
-    include!("windows_ui_a.rs");
-    include!("windows_ui_b.rs");
+    include!("windows_types.rs");
+    include!("windows_ffi.rs");
+    include!("windows_system.rs");
+    include!("windows_render.rs");
+    include!("windows_settings.rs");
+    include!("windows_ui.rs");
     include!("windows_run.rs");
 }
 

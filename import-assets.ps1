@@ -34,23 +34,45 @@ function Get-GitBlobSha1([byte[]] $Bytes) {
     return -join ($hash | ForEach-Object { $_.ToString('x2') })
 }
 
-foreach ($asset in $assets) {
-    $target = Join-Path $assetDir $asset.Name
-    Invoke-WebRequest -UseBasicParsing -Uri $asset.Url -OutFile $target
-
-    $bytes = [System.IO.File]::ReadAllBytes($target)
-    if ($bytes.Length -lt 100) {
-        throw "Downloaded asset is unexpectedly small: $($asset.Name)"
-    }
-    if ($bytes[0] -ne 0x89 -or $bytes[1] -ne 0x50 -or $bytes[2] -ne 0x4E -or $bytes[3] -ne 0x47) {
-        throw "Downloaded asset is not a PNG: $($asset.Name)"
+function Test-VerifiedAsset([string] $Path, [string] $ExpectedSha) {
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return $false
     }
 
-    $actual = Get-GitBlobSha1 $bytes
-    if ($actual -ne $asset.Sha) {
-        Remove-Item -Force $target
-        throw "Asset integrity check failed: $($asset.Name)"
+    try {
+        $bytes = [System.IO.File]::ReadAllBytes($Path)
+        if ($bytes.Length -lt 100) {
+            return $false
+        }
+        if ($bytes[0] -ne 0x89 -or $bytes[1] -ne 0x50 -or $bytes[2] -ne 0x4E -or $bytes[3] -ne 0x47) {
+            return $false
+        }
+        return (Get-GitBlobSha1 $bytes) -eq $ExpectedSha
+    }
+    catch {
+        return $false
     }
 }
 
-Write-Host 'Cat assets imported and verified from pinned RunCat365 / RunCatNeo commits.'
+foreach ($asset in $assets) {
+    $target = Join-Path $assetDir $asset.Name
+
+    if (Test-VerifiedAsset $target $asset.Sha) {
+        continue
+    }
+
+    $download = "$target.download"
+    Remove-Item -Force -ErrorAction SilentlyContinue $download
+    try {
+        Invoke-WebRequest -UseBasicParsing -Uri $asset.Url -OutFile $download
+        if (-not (Test-VerifiedAsset $download $asset.Sha)) {
+            throw "Asset integrity check failed: $($asset.Name)"
+        }
+        Move-Item -Force $download $target
+    }
+    finally {
+        Remove-Item -Force -ErrorAction SilentlyContinue $download
+    }
+}
+
+Write-Host 'Cat assets verified.'

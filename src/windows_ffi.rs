@@ -50,7 +50,36 @@
         fn GetWindowTextLengthW(hwnd: Hwnd) -> i32;
         fn GetWindowTextW(hwnd: Hwnd, text: *mut u16, max_count: i32) -> i32;
         fn MessageBoxW(hwnd: Hwnd, text: *const u16, caption: *const u16, kind: Uint) -> i32;
-        fn GetSysColorBrush(index: i32) -> Hbrush;
+        fn GetDC(hwnd: Hwnd) -> Hdc;
+        fn ReleaseDC(hwnd: Hwnd, dc: Hdc) -> i32;
+        fn DrawIconEx(
+            dc: Hdc,
+            x: i32,
+            y: i32,
+            icon: Hicon,
+            width: i32,
+            height: i32,
+            step: Uint,
+            brush: Hbrush,
+            flags: Uint,
+        ) -> Bool;
+        fn FillRect(dc: Hdc, rect: *const WorkRect, brush: Hbrush) -> i32;
+        fn SetLayeredWindowAttributes(hwnd: Hwnd, color_key: Dword, alpha: u8, flags: Dword) -> Bool;
+        fn SetWindowPos(
+            hwnd: Hwnd,
+            insert_after: Hwnd,
+            x: i32,
+            y: i32,
+            width: i32,
+            height: i32,
+            flags: Uint,
+        ) -> Bool;
+        fn SystemParametersInfoW(action: Uint, param: Uint, data: *mut c_void, update: Uint) -> Bool;
+        fn GetClientRect(hwnd: Hwnd, rect: *mut WorkRect) -> Bool;
+        fn InvalidateRect(hwnd: Hwnd, rect: *const WorkRect, erase: Bool) -> Bool;
+        fn GetDpiForWindow(hwnd: Hwnd) -> Uint;
+        fn GetDpiForSystem() -> Uint;
+        fn SetProcessDpiAwarenessContext(value: isize) -> Bool;
     }
 
     #[link(name = "kernel32")]
@@ -61,6 +90,9 @@
         fn CloseHandle(handle: Handle) -> Bool;
         fn GetModuleFileNameW(module: Hinstance, filename: *mut u16, size: Dword) -> Dword;
         fn GetSystemTimes(idle: *mut FileTime, kernel: *mut FileTime, user: *mut FileTime) -> Bool;
+        fn GlobalMemoryStatusEx(status: *mut MemoryStatusEx) -> Bool;
+        fn GetSystemPowerStatus(status: *mut SystemPowerStatus) -> Bool;
+        fn MoveFileExW(existing: *const u16, new_name: *const u16, flags: Dword) -> Bool;
     }
 
     #[link(name = "shell32")]
@@ -75,7 +107,11 @@
 
     #[link(name = "gdiplus")]
     extern "system" {
-        fn GdiplusStartup(token: *mut UlongPtr, input: *const GdiplusStartupInput, output: *mut c_void) -> GpStatus;
+        fn GdiplusStartup(
+            token: *mut UlongPtr,
+            input: *const GdiplusStartupInput,
+            output: *mut c_void,
+        ) -> GpStatus;
         fn GdiplusShutdown(token: UlongPtr);
         fn GdipLoadImageFromStream(stream: *mut Unknown, image: *mut *mut c_void) -> GpStatus;
         fn GdipGetImageWidth(image: *mut c_void, width: *mut Uint) -> GpStatus;
@@ -109,12 +145,37 @@
             bits: *const c_void,
         ) -> Hbitmap;
         fn DeleteObject(object: isize) -> Bool;
-        fn GetStockObject(index: i32) -> isize;
+        fn CreateSolidBrush(color: ColorRef) -> Hbrush;
+        fn CreateFontW(
+            height: i32,
+            width: i32,
+            escapement: i32,
+            orientation: i32,
+            weight: i32,
+            italic: Dword,
+            underline: Dword,
+            strikeout: Dword,
+            charset: Dword,
+            out_precision: Dword,
+            clip_precision: Dword,
+            quality: Dword,
+            pitch_and_family: Dword,
+            face: *const u16,
+        ) -> Hfont;
+        fn SetTextColor(dc: Hdc, color: ColorRef) -> ColorRef;
+        fn SetBkColor(dc: Hdc, color: ColorRef) -> ColorRef;
+        fn SetBkMode(dc: Hdc, mode: i32) -> i32;
     }
 
     #[link(name = "advapi32")]
     extern "system" {
-        fn RegOpenKeyExW(root: Hkey, subkey: *const u16, options: Dword, access: Dword, result: *mut Hkey) -> i32;
+        fn RegOpenKeyExW(
+            root: Hkey,
+            subkey: *const u16,
+            options: Dword,
+            access: Dword,
+            result: *mut Hkey,
+        ) -> i32;
         fn RegCreateKeyExW(
             root: Hkey,
             subkey: *const u16,
@@ -146,55 +207,17 @@
         fn RegCloseKey(key: Hkey) -> i32;
     }
 
-    struct OwnedHandle(Handle);
-
-    impl Drop for OwnedHandle {
-        fn drop(&mut self) {
-            if self.0 != 0 {
-                unsafe {
-                    CloseHandle(self.0);
-                }
-            }
-        }
+    #[link(name = "uxtheme")]
+    extern "system" {
+        fn SetWindowTheme(hwnd: Hwnd, sub_app_name: *const u16, sub_id_list: *const u16) -> i32;
     }
 
-    struct FramePixels {
-        width: u32,
-        height: u32,
-        pixels: Vec<u8>,
+    #[link(name = "dwmapi")]
+    extern "system" {
+        fn DwmSetWindowAttribute(
+            hwnd: Hwnd,
+            attribute: Dword,
+            value: *const c_void,
+            value_size: Dword,
+        ) -> i32;
     }
-
-    #[derive(Clone, Copy)]
-    struct AlphaBounds {
-        x: u32,
-        y: u32,
-        width: u32,
-        height: u32,
-    }
-
-    struct AppState {
-        hwnd: Hwnd,
-        overlay_hwnd: Hwnd,
-        source_frames: Vec<FramePixels>,
-        source_sleep: FramePixels,
-        icons: [Hicon; FRAME_COUNT],
-        sleep_icon: Hicon,
-        frame: usize,
-        last_idle: u64,
-        last_kernel: u64,
-        last_user: u64,
-        cpu_percent: f64,
-        ram_percent: f64,
-        animation_ms: Uint,
-        target_animation_ms: f64,
-        is_idle: bool,
-        on_battery: bool,
-        battery_paused: bool,
-        settings: Settings,
-        effective_light_theme: bool,
-        taskbar_created: Uint,
-        gdiplus_token: UlongPtr,
-        config_hwnd: Hwnd,
-    }
-
-    static STATE: OnceLock<Mutex<AppState>> = OnceLock::new();

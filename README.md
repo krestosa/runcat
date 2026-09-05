@@ -1,60 +1,71 @@
 # CatCPU
 
-Minimal native Windows tray cat written in Rust. The cat runs faster as total CPU load increases and curls up to sleep when CPU usage is at or below the configured idle threshold.
+A lightweight native Windows tray cat written in Rust. The cat runs faster as total CPU usage rises and curls up to sleep when activity falls below the configured threshold.
 
-CatCPU is a clean-room implementation. It does not copy source code from RunCat365, RunCatNeo, or GNOME RunCat. Only explicitly attributed cat image assets are reused under Apache-2.0. Asset provenance is documented below and the Apache-2.0 text is included under `LICENSES/`.
+The application is implemented with Win32 APIs and the Rust standard library. It does not require .NET, Electron, WebView, a background service, or third-party Rust crates.
 
-## Core behavior
+## Highlights
 
-- Native Windows notification-area application.
-- CPU usage is sampled with `GetSystemTimes`.
-- Five-frame running animation plus a dedicated sleeping-cat state.
-- Running and sleeping sprites are normalized to the same apparent scale.
-- Automatic contrast against the Windows taskbar theme.
-- Manual light/dark theme override.
-- No .NET, Electron, WebView, telemetry, background service, or third-party Rust crates.
-- Settings are stored in `%APPDATA%\CatCPU\settings.ini`.
-- Single-instance guard prevents duplicate tray cats.
-- Tray icon is restored after Explorer restarts.
+- Five-frame CPU-driven running animation.
+- Dedicated sleeping-cat idle state with configurable threshold and hysteresis.
+- Automatic cat contrast against the Windows taskbar theme.
+- Settings window that automatically follows the Windows app light/dark theme, including the title bar and native controls.
+- DPI-aware native UI.
+- Left-click the tray cat to open Settings; right-click for quick controls.
+- Configurable speed multiplier and Smooth / Linear / Reactive CPU curves.
+- Cat size from `12` to `64` px.
+- Optional click-through large overlay for physical `33–64` px rendering above the taskbar.
+- Running and sleeping sprites normalized to the same visual scale.
+- Optional manual animation pause.
+- Optional pause on battery.
+- Optional CPU, RAM, and battery information in the tray tooltip.
+- Start with Windows.
+- Single-instance guard.
+- Tray recovery after Explorer restarts.
+- Settings written atomically to `%APPDATA%\CatCPU\settings.ini`.
+
+## Performance behavior
+
+CPU is sampled with `GetSystemTimes`. RAM and power information are only sampled when a feature currently needs them, such as the Settings window, a related tooltip option, or battery-aware behavior.
+
+The tray icon and tooltip are only sent back to Explorer when their visible content changes. Windows theme registry reads are event-driven rather than performed on every CPU sample.
+
+When idle, manually paused, or paused by battery policy, the animation timer is stopped entirely.
 
 ## Settings
 
-Right-click the cat and choose **Settings...**. Changes apply without restarting CatCPU.
+The Settings window is split into two compact sections.
 
-- Theme: Automatic / Light / Dark.
-- Start with Windows: on/off.
-- Speed multiplier: `0.10x` to `5.00x`.
+**Appearance & animation**
+
+- Cat theme: Automatic / Light / Dark.
+- Start with Windows.
+- Speed multiplier: `0.10×–5.00×`.
 - Speed curve: Smooth / Linear / Reactive.
-- Cat size: `12` to `64` px.
-- Idle / sleep threshold: `0` to `100` percent CPU.
-- Idle hysteresis: `0` to `25` percentage points, to prevent rapid sleep/wake switching around the threshold.
-- CPU sample interval: `250` to `5000` ms.
-- Smooth speed changes: on/off.
-- Invert CPU / speed: on/off.
-- Sleeping cat when idle: on/off.
-- Tooltip CPU: on/off.
-- Tooltip RAM: on/off.
-- Pause animation on battery: on/off.
-- Large overlay mode: on/off.
-- Live CPU, RAM, power and running/sleeping status.
+- Cat size: `12–64 px`.
+- Smooth speed transitions.
+- Invert CPU / speed.
+- Manual pause.
 
-Windows controls the physical size of notification-area icons. Values above 32 px therefore keep the tray icon at the largest size Windows accepts. Enable **Large overlay** to render the cat physically at 33-64 px just above the taskbar while keeping the tray icon available for controls. The overlay is click-through and does not take focus from other windows.
+**Idle, power & tray**
 
-The right-click menu includes common speed, size and threshold presets; custom values configured in the settings window remain valid.
+- Sleep threshold: `0–100%`.
+- Wake hysteresis: `0–25%`.
+- CPU sampling: `250–5000 ms`.
+- Sleeping cat when idle.
+- Pause animation on battery.
+- Tooltip CPU / RAM / battery.
+- Large overlay mode.
+
+Resetting app settings does not silently change the Windows startup preference.
 
 ## Build on Windows
 
-Install the Rust MSVC toolchain, then run PowerShell from this directory:
+Install the Rust MSVC toolchain, then run:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
 .\build.ps1
-```
-
-`build.ps1` downloads only the required cat assets from pinned upstream commits, validates each one against its Git blob SHA, then runs:
-
-```powershell
-cargo build --release
 ```
 
 The executable is produced at:
@@ -63,12 +74,12 @@ The executable is produced at:
 target\release\catcpu.exe
 ```
 
-GitHub Actions also builds the Windows release on pushes and pull requests and uploads `catcpu.exe` as a workflow artifact.
+GitHub Actions runs `cargo check`, unit tests, Clippy, and a release build on Windows, then uploads the executable as an artifact.
 
-## Asset provenance
+## Assets
 
 Running frames are pinned to `runcat-dev/RunCat365@03b6e2b288c2df5df2433398f5547857bb4d0e2f`.
 
 The sleeping cat is pinned to `runcat-dev/RunCatNeo@b3b1543049ea0a051ecb78654a45f144724ea737`.
 
-The reused image assets remain subject to their upstream Apache-2.0 licensing terms; see `LICENSES/Apache-2.0.txt`.
+The reused image assets remain subject to their upstream Apache-2.0 licensing terms. The license text is included under `LICENSES/Apache-2.0.txt`.
