@@ -80,25 +80,6 @@
                 return Err("RegisterClassW failed");
             }
 
-            let settings_class_name = wide("CatCPU.SettingsWindow");
-            let settings_class = WndClassW {
-                style: 0,
-                wnd_proc: Some(mica_settings_wnd_proc),
-                cls_extra: 0,
-                wnd_extra: 0,
-                instance,
-                icon: 0,
-                cursor: 0,
-                background: 0,
-                menu_name: null(),
-                class_name: settings_class_name.as_ptr(),
-            };
-            if RegisterClassW(&settings_class) == 0 {
-                destroy_visuals(&visuals);
-                GdiplusShutdown(gdiplus_token);
-                return Err("settings RegisterClassW failed");
-            }
-
             let overlay_class_name = wide("CatCPU.OverlayWindow");
             let overlay_class = WndClassW {
                 style: 0,
@@ -206,9 +187,8 @@
             if let Err(returned) = STATE.set(Mutex::new(state)) {
                 DestroyWindow(overlay_hwnd);
                 DestroyWindow(hwnd);
-                if let Ok(mut state) = returned.into_inner() {
+                if let Ok(state) = returned.into_inner() {
                     destroy_visuals(&state.visuals);
-                    destroy_ui_resources(&mut state);
                     GdiplusShutdown(state.gdiplus_token);
                 }
                 return Err("state initialization failed");
@@ -249,27 +229,23 @@
                 DispatchMessageW(&msg);
             }
 
-            let (config_hwnd, overlay_hwnd) = if let Some(lock) = STATE.get() {
+            let overlay_hwnd = if let Some(lock) = STATE.get() {
                 if let Ok(state) = lock.lock() {
-                    (state.config_hwnd, state.overlay_hwnd)
+                    state.overlay_hwnd
                 } else {
-                    (0, 0)
+                    0
                 }
             } else {
-                (0, 0)
+                0
             };
 
-            if config_hwnd != 0 && IsWindow(config_hwnd) != 0 {
-                DestroyWindow(config_hwnd);
-            }
             if overlay_hwnd != 0 && IsWindow(overlay_hwnd) != 0 {
                 DestroyWindow(overlay_hwnd);
             }
 
             if let Some(lock) = STATE.get() {
-                if let Ok(mut state) = lock.lock() {
+                if let Ok(state) = lock.lock() {
                     destroy_visuals(&state.visuals);
-                    destroy_ui_resources(&mut state);
                     GdiplusShutdown(state.gdiplus_token);
                 }
             }
