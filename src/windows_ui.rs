@@ -87,12 +87,11 @@
                 return;
             }
             MENU_SETTINGS => {
-                open_settings_window(hwnd);
+                launch_modern_settings(hwnd);
                 return;
             }
             MENU_STARTUP => {
                 let _ = set_startup_enabled(!startup_enabled());
-                sync_settings_window();
                 return;
             }
             MENU_RESET => {
@@ -159,8 +158,6 @@
         }
         apply_behavior(&mut state, true);
         update_tray_tooltip_if_changed(&mut state, true);
-        drop(state);
-        sync_settings_window();
     }
 
     fn show_context_menu(hwnd: Hwnd) {
@@ -340,14 +337,13 @@
             state.cpu_percent = cpu;
         }
 
-        let config_open = config_window_open(state);
-        if state.settings.tooltip_ram || config_open {
+        if state.settings.tooltip_ram {
             if let Some(ram) = ram_usage_percent() {
                 state.ram_percent = ram;
             }
         }
 
-        if state.settings.pause_on_battery || state.settings.tooltip_battery || config_open {
+        if state.settings.pause_on_battery || state.settings.tooltip_battery {
             state.power = read_power_status();
         }
     }
@@ -376,6 +372,10 @@
         }
 
         match msg {
+            SETTINGS_CHANGED_MESSAGE => {
+                apply_external_settings_update();
+                return 0;
+            }
             WM_TIMER => {
                 if w_param == TIMER_ANIMATION {
                     if let Some(lock) = STATE.get() {
@@ -409,30 +409,24 @@
                             apply_behavior(&mut state, false);
                         }
                     }
-                    update_settings_status();
                     return 0;
                 }
             }
             WM_SETTINGCHANGE | WM_THEMECHANGED | WM_SYSCOLORCHANGE => {
-                let mut config = 0;
                 if let Some(lock) = STATE.get() {
                     if let Ok(mut state) = lock.lock() {
                         if state.settings.theme == ThemeMode::Auto {
                             let _ = rebuild_visuals(&mut state, false);
                         }
-                        config = state.config_hwnd;
                         sync_overlay(&state);
                     }
-                }
-                if config != 0 {
-                    apply_settings_theme(config);
                 }
                 return 0;
             }
             TRAY_CALLBACK => {
                 match l_param as Uint {
                     WM_RBUTTONUP => show_context_menu(hwnd),
-                    WM_LBUTTONUP | WM_LBUTTONDBLCLK => open_settings_window(hwnd),
+                    WM_LBUTTONUP | WM_LBUTTONDBLCLK => launch_modern_settings(hwnd),
                     _ => {}
                 }
                 return 0;
