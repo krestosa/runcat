@@ -20,7 +20,7 @@ mod windows_app {
     include!("windows_system.rs");
     include!("windows_render.rs");
     include!("windows_settings.rs");
-    include!("windows_mica.rs");
+    include!("windows_fluent_settings.rs");
     include!("windows_ui.rs");
     include!("windows_run.rs");
 }
