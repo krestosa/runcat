@@ -2,14 +2,14 @@
 
 A lightweight native Windows tray cat written in Rust. The cat runs faster as total CPU usage rises and curls up to sleep when activity falls below the configured threshold.
 
-The application is implemented with Win32 APIs and the Rust standard library. It does not require .NET, Electron, WebView, a background service, or third-party Rust crates. The native UI is designed for current Windows 10/11 desktop environments.
+The application is implemented with Win32 APIs and the Rust standard library. It does not require .NET, Electron, WebView, a background service, or third-party Rust crates.
 
 ## Highlights
 
 - Five-frame CPU-driven running animation.
 - Dedicated sleeping-cat idle state with configurable threshold and hysteresis.
 - Automatic cat contrast against the Windows taskbar theme.
-- Settings window that automatically follows the Windows app light/dark theme, including the title bar and native controls.
+- Settings window with Windows 11 Mica and a WinUI 3-inspired native layout, while still following the Windows app light/dark theme.
 - DPI-aware native UI.
 - Left-click the tray cat to open Settings; right-click for quick controls.
 - Configurable speed multiplier and Smooth / Linear / Reactive CPU curves.
@@ -75,6 +75,10 @@ target\release\catcpu.exe
 ```
 
 GitHub Actions runs `cargo check`, unit tests, Clippy, and a release build on Windows, then uploads the executable as an artifact.
+
+## Windows UI
+
+On Windows 11 22H2 or newer, Settings requests the official `DWMSBT_MAINWINDOW` system backdrop, which corresponds to Mica. The window uses DWM rounded corners and keeps the existing Windows-driven light/dark behavior. If the system backdrop API is unavailable, the same interface falls back to its normal themed background.
 
 ## Assets
 
