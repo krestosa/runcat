@@ -2,7 +2,7 @@
 
 A lightweight native Windows tray cat written in Rust. The cat runs faster as total CPU usage rises and curls up to sleep when activity falls below the configured threshold.
 
-The application is implemented with Win32 APIs and the Rust standard library. It does not require .NET, Electron, WebView, a background service, or third-party Rust crates.
+The application is implemented with Win32 APIs and the Rust standard library. It does not require .NET, Electron, WebView, a background service, or third-party Rust crates. The native UI is designed for current Windows 10/11 desktop environments.
 
 ## Highlights
 
