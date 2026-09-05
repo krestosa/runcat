@@ -201,7 +201,10 @@
         border: ColorRef,
     ) {
         let pen = CreatePen(MICA_PS_SOLID, 1, border);
-        let brush = fill.map(CreateSolidBrush).unwrap_or(0);
+        let brush = match fill {
+            Some(color) => CreateSolidBrush(color),
+            None => 0,
+        };
         let old_pen = if pen != 0 { SelectObject(dc, pen) } else { 0 };
         let old_brush = if brush != 0 {
             SelectObject(dc, brush)
