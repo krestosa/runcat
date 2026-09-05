@@ -9,6 +9,7 @@ use std::ptr::{null, null_mut};
 use windows_reactor::*;
 
 const WM_APP: u32 = 0x8000;
+const WM_CLOSE: u32 = 0x0010;
 const SETTINGS_CHANGED_MESSAGE: u32 = WM_APP + 50;
 const HKEY_CURRENT_USER: isize = -2_147_483_647isize;
 const ERROR_SUCCESS: i32 = 0;
@@ -143,12 +144,25 @@ fn atomic_write_settings(text: &str) -> bool {
     moved
 }
 
-fn notify_tray_app() {
+fn tray_hwnd() -> isize {
     let class_name = wide("CatCPU.HiddenWindow");
-    unsafe {
-        let hwnd = FindWindowW(class_name.as_ptr(), null());
-        if hwnd != 0 {
+    unsafe { FindWindowW(class_name.as_ptr(), null()) }
+}
+
+fn notify_tray_app() {
+    let hwnd = tray_hwnd();
+    if hwnd != 0 {
+        unsafe {
             PostMessageW(hwnd, SETTINGS_CHANGED_MESSAGE, 0, 0);
+        }
+    }
+}
+
+fn exit_tray_app() {
+    let hwnd = tray_hwnd();
+    if hwnd != 0 {
+        unsafe {
+            PostMessageW(hwnd, WM_CLOSE, 0, 0);
         }
     }
 }
@@ -403,9 +417,23 @@ impl SettingsModel {
     }
 }
 
+fn persist_model(model: SettingsModel) {
+    if model.save() {
+        notify_tray_app();
+    }
+}
+
+fn open_full_settings() {
+    if let Ok(exe) = std::env::current_exe() {
+        let _ = std::process::Command::new(exe).spawn();
+    }
+}
+
 #[derive(Clone)]
 enum Message {
     Page(Option<String>),
+    PaneOpen(bool),
+    DisplayMode(NavigationViewDisplayMode),
     Theme(Option<usize>),
     Startup(bool),
     Speed(Option<f64>),
@@ -428,14 +456,14 @@ enum Message {
 
 struct SettingsApp {
     page: String,
+    pane_open: bool,
+    display_mode: NavigationViewDisplayMode,
     model: SettingsModel,
 }
 
 impl SettingsApp {
     fn persist(&self) {
-        if self.model.save() {
-            notify_tray_app();
-        }
+        persist_model(self.model);
     }
 
     fn settings_card(title: &str, description: &str, action: impl Into<View>) -> View {
@@ -446,21 +474,28 @@ impl SettingsApp {
             .corner_radius(4.0)
             .min_height(68.0)
             .padding(16.0)
+            .horizontal_alignment(HorizontalAlignment::Stretch)
             .content(
                 Grid::new()
                     .columns([GridLength::STAR, GridLength::Auto])
-                    .column_spacing(24.0)
+                    .column_spacing(16.0)
+                    .horizontal_alignment(HorizontalAlignment::Stretch)
                     .children((
                         StackPanel::new()
                             .spacing(2.0)
                             .vertical_alignment(VerticalAlignment::Center)
+                            .horizontal_alignment(HorizontalAlignment::Stretch)
                             .grid_column(0)
                             .children((
-                                TextBlock::new().text(title).font_size(14.0),
+                                TextBlock::new()
+                                    .text(title)
+                                    .font_size(14.0)
+                                    .text_wrapping(TextWrapping::Wrap),
                                 TextBlock::new()
                                     .text(description)
                                     .font_size(12.0)
-                                    .opacity(0.7),
+                                    .opacity(0.7)
+                                    .text_wrapping(TextWrapping::Wrap),
                             )),
                         Border::new()
                             .grid_column(1)
@@ -473,22 +508,29 @@ impl SettingsApp {
     }
 
     fn page_shell(title: &str, body: impl Into<View>) -> View {
-        StackPanel::new()
-            .max_width(720.0)
-            .horizontal_alignment(HorizontalAlignment::Left)
-            .margin(Thickness::uniform(24.0))
-            .spacing(16.0)
-            .children((
-                TextBlock::new()
-                    .text(title)
-                    .font_size(28.0)
-                    .font_weight(FontWeight::SEMI_BOLD),
-                TextBlock::new()
-                    .text("Changes are applied immediately.")
-                    .font_size(12.0)
-                    .opacity(0.7),
-                body.into(),
-            ))
+        ScrollViewer::new()
+            .horizontal_scroll_bar_visibility(ScrollBarVisibility::Disabled)
+            .vertical_scroll_bar_visibility(ScrollBarVisibility::Auto)
+            .horizontal_alignment(HorizontalAlignment::Stretch)
+            .vertical_alignment(VerticalAlignment::Stretch)
+            .content(
+                StackPanel::new()
+                    .max_width(760.0)
+                    .horizontal_alignment(HorizontalAlignment::Stretch)
+                    .margin(Thickness::uniform(24.0))
+                    .spacing(16.0)
+                    .children((
+                        TextBlock::new()
+                            .text(title)
+                            .font_size(28.0)
+                            .font_weight(FontWeight::SEMI_BOLD),
+                        TextBlock::new()
+                            .text("Changes are applied immediately.")
+                            .font_size(12.0)
+                            .opacity(0.7),
+                        body.into(),
+                    )),
+            )
             .into()
     }
 
@@ -517,32 +559,35 @@ impl SettingsApp {
 
         Self::page_shell(
             "Appearance",
-            StackPanel::new().spacing(8.0).children((
-                Self::settings_card(
-                    "Cat theme",
-                    "Follow Windows automatically or override the cat contrast.",
-                    theme,
-                ),
-                Self::settings_card(
-                    "Cat size",
-                    "Set the visual size from 12 to 64 px.",
-                    size,
-                ),
-                Self::settings_card(
-                    "Large overlay",
-                    "Show sizes above the notification-area limit in an overlay.",
-                    overlay,
-                ),
-                Self::settings_card(
-                    "Start with Windows",
-                    "Launch CatCPU when the current user signs in.",
-                    startup,
-                ),
-                Button::new()
-                    .horizontal_alignment(HorizontalAlignment::Left)
-                    .on_click(context.callback(|_| Message::Reset))
-                    .content("Reset defaults"),
-            )),
+            StackPanel::new()
+                .spacing(8.0)
+                .horizontal_alignment(HorizontalAlignment::Stretch)
+                .children((
+                    Self::settings_card(
+                        "Cat theme",
+                        "Follow Windows automatically or override the cat contrast.",
+                        theme,
+                    ),
+                    Self::settings_card(
+                        "Cat size",
+                        "Set the visual size from 12 to 64 px.",
+                        size,
+                    ),
+                    Self::settings_card(
+                        "Large overlay",
+                        "Show sizes above the notification-area limit in an overlay.",
+                        overlay,
+                    ),
+                    Self::settings_card(
+                        "Start with Windows",
+                        "Launch CatCPU when the current user signs in.",
+                        startup,
+                    ),
+                    Button::new()
+                        .horizontal_alignment(HorizontalAlignment::Left)
+                        .on_click(context.callback(|_| Message::Reset))
+                        .content("Reset defaults"),
+                )),
         )
     }
 
@@ -570,33 +615,36 @@ impl SettingsApp {
 
         Self::page_shell(
             "Animation",
-            StackPanel::new().spacing(8.0).children((
-                Self::settings_card(
-                    "Speed multiplier",
-                    "Scale animation speed from 0.10× to 5.00×.",
-                    speed,
-                ),
-                Self::settings_card(
-                    "Speed curve",
-                    "Choose how strongly CPU usage changes animation speed.",
-                    curve,
-                ),
-                Self::settings_card(
-                    "Smooth speed transitions",
-                    "Blend speed changes rather than stepping between values.",
-                    smooth,
-                ),
-                Self::settings_card(
-                    "Invert CPU / speed",
-                    "Reverse the relationship between CPU usage and animation speed.",
-                    invert,
-                ),
-                Self::settings_card(
-                    "Pause animation",
-                    "Keep the current cat visible without advancing frames.",
-                    pause,
-                ),
-            )),
+            StackPanel::new()
+                .spacing(8.0)
+                .horizontal_alignment(HorizontalAlignment::Stretch)
+                .children((
+                    Self::settings_card(
+                        "Speed multiplier",
+                        "Scale animation speed from 0.10× to 5.00×.",
+                        speed,
+                    ),
+                    Self::settings_card(
+                        "Speed curve",
+                        "Choose how strongly CPU usage changes animation speed.",
+                        curve,
+                    ),
+                    Self::settings_card(
+                        "Smooth speed transitions",
+                        "Blend speed changes rather than stepping between values.",
+                        smooth,
+                    ),
+                    Self::settings_card(
+                        "Invert CPU / speed",
+                        "Reverse the relationship between CPU usage and animation speed.",
+                        invert,
+                    ),
+                    Self::settings_card(
+                        "Pause animation",
+                        "Keep the current cat visible without advancing frames.",
+                        pause,
+                    ),
+                )),
         )
     }
 
@@ -628,33 +676,36 @@ impl SettingsApp {
 
         Self::page_shell(
             "Idle & power",
-            StackPanel::new().spacing(8.0).children((
-                Self::settings_card(
-                    "Sleep threshold",
-                    "Enter the CPU percentage at or below which the cat becomes idle.",
-                    threshold,
-                ),
-                Self::settings_card(
-                    "Wake hysteresis",
-                    "Require extra CPU activity before waking to prevent rapid toggling.",
-                    hysteresis,
-                ),
-                Self::settings_card(
-                    "CPU sampling",
-                    "Set the CPU sampling interval from 250 to 5000 ms.",
-                    sample,
-                ),
-                Self::settings_card(
-                    "Sleeping cat when idle",
-                    "Use the sleeping sprite instead of freezing a running frame.",
-                    sleeping,
-                ),
-                Self::settings_card(
-                    "Pause animation on battery",
-                    "Reduce animation activity while the computer is unplugged.",
-                    battery,
-                ),
-            )),
+            StackPanel::new()
+                .spacing(8.0)
+                .horizontal_alignment(HorizontalAlignment::Stretch)
+                .children((
+                    Self::settings_card(
+                        "Sleep threshold",
+                        "Enter the CPU percentage at or below which the cat becomes idle.",
+                        threshold,
+                    ),
+                    Self::settings_card(
+                        "Wake hysteresis",
+                        "Require extra CPU activity before waking to prevent rapid toggling.",
+                        hysteresis,
+                    ),
+                    Self::settings_card(
+                        "CPU sampling",
+                        "Set the CPU sampling interval from 250 to 5000 ms.",
+                        sample,
+                    ),
+                    Self::settings_card(
+                        "Sleeping cat when idle",
+                        "Use the sleeping sprite instead of freezing a running frame.",
+                        sleeping,
+                    ),
+                    Self::settings_card(
+                        "Pause animation on battery",
+                        "Reduce animation activity while the computer is unplugged.",
+                        battery,
+                    ),
+                )),
         )
     }
 
@@ -671,23 +722,26 @@ impl SettingsApp {
 
         Self::page_shell(
             "Tray",
-            StackPanel::new().spacing(8.0).children((
-                Self::settings_card(
-                    "CPU in tooltip",
-                    "Show current total CPU usage in the notification-area tooltip.",
-                    cpu,
-                ),
-                Self::settings_card(
-                    "RAM in tooltip",
-                    "Show current physical memory usage in the tooltip.",
-                    ram,
-                ),
-                Self::settings_card(
-                    "Battery in tooltip",
-                    "Show AC or battery state and charge percentage in the tooltip.",
-                    battery,
-                ),
-            )),
+            StackPanel::new()
+                .spacing(8.0)
+                .horizontal_alignment(HorizontalAlignment::Stretch)
+                .children((
+                    Self::settings_card(
+                        "CPU in tooltip",
+                        "Show current total CPU usage in the notification-area tooltip.",
+                        cpu,
+                    ),
+                    Self::settings_card(
+                        "RAM in tooltip",
+                        "Show current physical memory usage in the tooltip.",
+                        ram,
+                    ),
+                    Self::settings_card(
+                        "Battery in tooltip",
+                        "Show AC or battery state and charge percentage in the tooltip.",
+                        battery,
+                    ),
+                )),
         )
     }
 }
@@ -699,6 +753,8 @@ impl Component for SettingsApp {
     fn create(_input: &Self::Input, _context: &ComponentContext<Self>) -> Self {
         Self {
             page: "appearance".to_string(),
+            pane_open: true,
+            display_mode: NavigationViewDisplayMode::Expanded,
             model: SettingsModel::load(),
         }
     }
@@ -713,6 +769,14 @@ impl Component for SettingsApp {
                 persist = false;
             }
             Message::Page(_) => persist = false,
+            Message::PaneOpen(value) => {
+                self.pane_open = value;
+                persist = false;
+            }
+            Message::DisplayMode(value) => {
+                self.display_mode = value;
+                persist = false;
+            }
             Message::Theme(Some(index)) if index <= 2 => self.model.theme = index,
             Message::Theme(_) => persist = false,
             Message::Startup(value) => {
@@ -768,23 +832,34 @@ impl Component for SettingsApp {
         context.window_visuals(
             WindowVisuals::new()
                 .backdrop(WindowBackdrop::Mica)
-                .client_size(960.0, 720.0),
+                .client_size(900.0, 700.0)
+                .constraints(WindowConstraints {
+                    min_width: Some(560.0),
+                    min_height: Some(520.0),
+                    ..Default::default()
+                }),
         );
 
         let items = [
-            ("appearance", "Appearance"),
-            ("animation", "Animation"),
-            ("idle", "Idle & power"),
-            ("tray", "Tray"),
+            ("appearance", "Appearance", Symbol::Setting),
+            ("animation", "Animation", Symbol::Play),
+            ("idle", "Idle & power", Symbol::Clock),
+            ("tray", "Tray", Symbol::More),
         ]
         .into_iter()
-        .map(|(tag, label)| {
+        .map(|(tag, label, symbol)| {
             KeyedView::new(
                 tag,
                 NavigationViewItem::new()
                     .tag(tag)
                     .is_selected(self.page == tag)
-                    .slot(NavigationViewItemSlot::Content, label),
+                    .slots([
+                        SlotView::new(NavigationViewItemSlot::Content, label),
+                        SlotView::new(
+                            NavigationViewItemSlot::Icon,
+                            SymbolIcon::new().symbol(symbol),
+                        ),
+                    ]),
             )
         });
 
@@ -796,7 +871,11 @@ impl Component for SettingsApp {
         };
 
         NavigationView::new()
-            .pane_display_mode(NavigationViewPaneDisplayMode::Left)
+            .is_pane_open(self.pane_open)
+            .on_is_pane_open_changed(context.callback(Message::PaneOpen))
+            .pane_display_mode(NavigationViewPaneDisplayMode::Auto)
+            .on_display_mode_changed(context.callback(Message::DisplayMode))
+            .open_pane_length(280.0)
             .pane_title("CatCPU")
             .is_settings_visible(false)
             .on_selected_tag_changed(context.callback(Message::Page))
@@ -807,16 +886,214 @@ impl Component for SettingsApp {
     }
 }
 
-fn main() {
-    let mutex_name = wide("Local\\CatCPU.Settings.Singleton");
-    let mutex = unsafe { CreateMutexW(null(), 0, mutex_name.as_ptr()) };
-    if mutex == 0 {
-        return;
-    }
-    let _guard = OwnedHandle(mutex);
-    if unsafe { GetLastError() } == ERROR_ALREADY_EXISTS {
-        return;
+#[derive(Clone)]
+enum QuickMessage {
+    Theme(Option<usize>),
+    Speed(Option<f64>),
+    Size(Option<f64>),
+    Pause(bool),
+    Startup(bool),
+    Sleep(bool),
+    OpenFull,
+    Exit,
+}
+
+struct TrayQuickApp {
+    model: SettingsModel,
+}
+
+impl TrayQuickApp {
+    fn persist(&self) {
+        persist_model(self.model);
     }
 
-    let _ = App::run_component::<SettingsApp>(());
+    fn row(title: &str, action: impl Into<View>) -> View {
+        Border::new()
+            .background(ThemeBrush::CardBackground)
+            .border_brush(ThemeBrush::CardStroke)
+            .border_thickness(1.0)
+            .corner_radius(4.0)
+            .min_height(56.0)
+            .padding(12.0)
+            .horizontal_alignment(HorizontalAlignment::Stretch)
+            .content(
+                Grid::new()
+                    .columns([GridLength::STAR, GridLength::Auto])
+                    .column_spacing(12.0)
+                    .children((
+                        TextBlock::new()
+                            .text(title)
+                            .font_size(14.0)
+                            .vertical_alignment(VerticalAlignment::Center)
+                            .grid_column(0),
+                        Border::new()
+                            .grid_column(1)
+                            .vertical_alignment(VerticalAlignment::Center)
+                            .horizontal_alignment(HorizontalAlignment::Right)
+                            .content(action),
+                    )),
+            )
+            .into()
+    }
+}
+
+impl Component for TrayQuickApp {
+    type Message = QuickMessage;
+    type Input = ();
+
+    fn create(_input: &Self::Input, _context: &ComponentContext<Self>) -> Self {
+        Self {
+            model: SettingsModel::load(),
+        }
+    }
+
+    fn update(&mut self, message: QuickMessage, _context: &ComponentContext<Self>) {
+        let mut persist = true;
+        match message {
+            QuickMessage::Theme(Some(index)) if index <= 2 => self.model.theme = index,
+            QuickMessage::Theme(_) => persist = false,
+            QuickMessage::Speed(Some(value)) if (0.10..=5.0).contains(&value) => {
+                self.model.speed_multiplier = value;
+            }
+            QuickMessage::Speed(_) => persist = false,
+            QuickMessage::Size(Some(value)) if (12.0..=64.0).contains(&value) => {
+                self.model.size_px = value.round() as u32;
+            }
+            QuickMessage::Size(_) => persist = false,
+            QuickMessage::Pause(value) => self.model.manual_pause = value,
+            QuickMessage::Startup(value) => {
+                if set_startup_enabled(value) {
+                    self.model.startup = value;
+                }
+                persist = false;
+            }
+            QuickMessage::Sleep(value) => self.model.sleep_idle = value,
+            QuickMessage::OpenFull => {
+                open_full_settings();
+                persist = false;
+            }
+            QuickMessage::Exit => {
+                exit_tray_app();
+                persist = false;
+            }
+        }
+        if persist {
+            self.persist();
+        }
+    }
+
+    fn view(&self, _input: &Self::Input, context: &mut ViewContext<Self>) -> View {
+        context.window_title("CatCPU");
+        context.window_visuals(
+            WindowVisuals::new()
+                .backdrop(WindowBackdrop::Mica)
+                .client_size(420.0, 520.0)
+                .constraints(WindowConstraints {
+                    min_width: Some(360.0),
+                    min_height: Some(440.0),
+                    max_width: Some(520.0),
+                    ..Default::default()
+                }),
+        );
+
+        let theme = ComboBox::new()
+            .width(180.0)
+            .items_source(["Automatic", "Light", "Dark"])
+            .selected_index(self.model.theme)
+            .on_selection_changed(context.callback(QuickMessage::Theme));
+        let speed = NumberBox::new()
+            .width(120.0)
+            .minimum(0.10)
+            .maximum(5.0)
+            .value(self.model.speed_multiplier)
+            .on_value_changed(context.callback(QuickMessage::Speed));
+        let size = NumberBox::new()
+            .width(120.0)
+            .minimum(12.0)
+            .maximum(64.0)
+            .value(self.model.size_px as f64)
+            .on_value_changed(context.callback(QuickMessage::Size));
+        let pause = ToggleSwitch::new()
+            .is_on(self.model.manual_pause)
+            .on_toggled(context.callback(QuickMessage::Pause));
+        let startup = ToggleSwitch::new()
+            .is_on(self.model.startup)
+            .on_toggled(context.callback(QuickMessage::Startup));
+        let sleep = ToggleSwitch::new()
+            .is_on(self.model.sleep_idle)
+            .on_toggled(context.callback(QuickMessage::Sleep));
+
+        ScrollViewer::new()
+            .horizontal_scroll_bar_visibility(ScrollBarVisibility::Disabled)
+            .vertical_scroll_bar_visibility(ScrollBarVisibility::Auto)
+            .content(
+                StackPanel::new()
+                    .margin(Thickness::uniform(16.0))
+                    .spacing(8.0)
+                    .horizontal_alignment(HorizontalAlignment::Stretch)
+                    .children((
+                        TextBlock::new()
+                            .text("CatCPU")
+                            .font_size(24.0)
+                            .font_weight(FontWeight::SEMI_BOLD),
+                        TextBlock::new()
+                            .text("Quick settings")
+                            .font_size(12.0)
+                            .opacity(0.7),
+                        Self::row("Pause animation", pause),
+                        Self::row("Start with Windows", startup),
+                        Self::row("Cat theme", theme),
+                        Self::row("Speed", speed),
+                        Self::row("Cat size", size),
+                        Self::row("Sleeping cat when idle", sleep),
+                        Grid::new()
+                            .columns([GridLength::STAR, GridLength::Auto])
+                            .column_spacing(8.0)
+                            .margin(Thickness::uniform(4.0))
+                            .children((
+                                Button::new()
+                                    .style(ButtonStyle::Accent)
+                                    .horizontal_alignment(HorizontalAlignment::Left)
+                                    .grid_column(0)
+                                    .on_click(context.callback(|_| QuickMessage::OpenFull))
+                                    .content("Open Settings"),
+                                Button::new()
+                                    .grid_column(1)
+                                    .on_click(context.callback(|_| QuickMessage::Exit))
+                                    .content("Exit CatCPU"),
+                            )),
+                    )),
+            )
+    }
+}
+
+fn run_single_instance(name: &str) -> Option<OwnedHandle> {
+    let mutex_name = wide(name);
+    let mutex = unsafe { CreateMutexW(null(), 0, mutex_name.as_ptr()) };
+    if mutex == 0 {
+        return None;
+    }
+    let guard = OwnedHandle(mutex);
+    if unsafe { GetLastError() } == ERROR_ALREADY_EXISTS {
+        return None;
+    }
+    Some(guard)
+}
+
+fn main() {
+    let tray_quick = std::env::args().any(|arg| arg == "--tray");
+    let mutex = if tray_quick {
+        run_single_instance("Local\\CatCPU.TrayQuick.Singleton")
+    } else {
+        run_single_instance("Local\\CatCPU.Settings.Singleton")
+    };
+    let Some(_guard) = mutex else {
+        return;
+    };
+
+    if tray_quick {
+        let _ = App::run_component::<TrayQuickApp>(());
+    } else {
+        let _ = App::run_component::<SettingsApp>(());
+    }
 }
