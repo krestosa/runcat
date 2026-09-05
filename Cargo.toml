@@ -1,10 +1,16 @@
 [package]
 name = "catcpu"
-version = "0.5.4"
+version = "0.6.0"
 edition = "2021"
 description = "Lightweight native Windows tray cat whose animation follows CPU load"
 license = "MIT"
 publish = false
+
+[dependencies]
+windows-reactor = "0.100.0"
+
+[build-dependencies]
+windows-reactor-setup = "0.100.0"
 
 [profile.release]
 opt-level = "z"
