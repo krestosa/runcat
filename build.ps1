@@ -14,7 +14,18 @@ try {
         throw "cargo build --release failed with exit code $LASTEXITCODE"
     }
 
-    Write-Host "Built: $PSScriptRoot\target\release\catcpu.exe"
+    $tray = Join-Path $PSScriptRoot 'target\release\catcpu.exe'
+    $settings = Join-Path $PSScriptRoot 'target\release\catcpu-settings.exe'
+    if (-not (Test-Path $tray)) {
+        throw "Missing build output: $tray"
+    }
+    if (-not (Test-Path $settings)) {
+        throw "Missing WinUI Settings output: $settings"
+    }
+
+    Write-Host "Built tray app: $tray"
+    Write-Host "Built WinUI Settings: $settings"
+    Write-Host 'Keep both executables and the staged Windows App SDK runtime files together in target\release.'
     Write-Host 'Left-click the tray cat for Settings; right-click for quick controls.'
 }
 finally {

@@ -36,9 +36,35 @@ jobs:
       - name: Build release
         run: cargo build --release
 
-      - name: Upload executable
+      - name: Stage self-contained package
+        shell: pwsh
+        run: |
+          $source = Join-Path $PWD 'target\release'
+          $dest = Join-Path $PWD 'dist\CatCPU'
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+
+          Copy-Item (Join-Path $source 'catcpu.exe') $dest
+          Copy-Item (Join-Path $source 'catcpu-settings.exe') $dest
+
+          Get-ChildItem $source -File | Where-Object {
+            $_.Extension -in @('.dll', '.pri', '.xaml')
+          } | ForEach-Object {
+            Copy-Item $_.FullName $dest
+          }
+
+          Get-ChildItem $source -Directory | Where-Object {
+            $_.Name -notin @('build', 'deps', 'examples', 'incremental')
+          } | ForEach-Object {
+            Copy-Item $_.FullName (Join-Path $dest $_.Name) -Recurse
+          }
+
+          if (-not (Test-Path (Join-Path $dest 'catcpu.exe'))) { throw 'catcpu.exe was not staged' }
+          if (-not (Test-Path (Join-Path $dest 'catcpu-settings.exe'))) { throw 'catcpu-settings.exe was not staged' }
+          if (-not (Test-Path (Join-Path $dest 'Microsoft.WindowsAppRuntime.dll'))) { throw 'Windows App SDK runtime was not staged' }
+
+      - name: Upload self-contained app
         uses: actions/upload-artifact@v4
         with:
           name: catcpu-windows-x64
-          path: target/release/catcpu.exe
+          path: dist/CatCPU
           if-no-files-found: error
