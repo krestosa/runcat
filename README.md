@@ -8,36 +8,39 @@ CatCPU is a clean-room implementation. It does not copy source code from RunCat3
 
 - Native Windows notification-area application.
 - CPU usage is sampled with `GetSystemTimes`.
-- Five-frame running animation.
-- Dedicated sleeping-cat state while idle.
-- Running and sleeping sprites are alpha-bounds normalized to the same visual scale while preserving aspect ratio.
-- Automatic contrast against the Windows taskbar theme:
-  - light taskbar -> black cat
-  - dark taskbar -> white cat
-- Manual theme override is available.
+- Five-frame running animation plus a dedicated sleeping-cat state.
+- Running and sleeping sprites are normalized to the same apparent scale.
+- Automatic contrast against the Windows taskbar theme.
+- Manual light/dark theme override.
 - No .NET, Electron, WebView, telemetry, background service, or third-party Rust crates.
 - Settings are stored in `%APPDATA%\CatCPU\settings.ini`.
 - Single-instance guard prevents duplicate tray cats.
 - Tray icon is restored after Explorer restarts.
 
-## Settings UI
+## Settings
 
-Right-click the cat and choose **Settings...**. The settings window uses native Win32 controls and applies changes without restarting CatCPU.
-
-Editable ranges are intentionally continuous rather than preset-only:
+Right-click the cat and choose **Settings...**. Changes apply without restarting CatCPU.
 
 - Theme: Automatic / Light / Dark.
 - Start with Windows: on/off.
 - Speed multiplier: `0.10x` to `5.00x`.
-- Cat size: `12` to `32` px inside the Windows tray icon canvas.
+- Speed curve: Smooth / Linear / Reactive.
+- Cat size: `12` to `64` px.
 - Idle / sleep threshold: `0` to `100` percent CPU.
+- Idle hysteresis: `0` to `25` percentage points, to prevent rapid sleep/wake switching around the threshold.
 - CPU sample interval: `250` to `5000` ms.
 - Smooth speed changes: on/off.
 - Invert CPU / speed: on/off.
-- Show sleeping cat when idle: on/off.
-- Live CPU / running / sleeping status.
+- Sleeping cat when idle: on/off.
+- Tooltip CPU: on/off.
+- Tooltip RAM: on/off.
+- Pause animation on battery: on/off.
+- Large overlay mode: on/off.
+- Live CPU, RAM, power and running/sleeping status.
 
-The right-click submenus still expose a few common values as quick shortcuts; custom values configured in the settings window remain valid even when they do not match a shortcut.
+Windows controls the physical size of notification-area icons. Values above 32 px therefore keep the tray icon at the largest size Windows accepts. Enable **Large overlay** to render the cat physically at 33-64 px just above the taskbar while keeping the tray icon available for controls.
+
+The right-click menu includes common speed, size and threshold presets; custom values configured in the settings window remain valid.
 
 ## Build on Windows
 
@@ -59,6 +62,8 @@ The executable is produced at:
 ```text
 target\release\catcpu.exe
 ```
+
+GitHub Actions also builds the Windows release on pushes and pull requests and uploads `catcpu.exe` as a workflow artifact.
 
 ## Asset provenance
 

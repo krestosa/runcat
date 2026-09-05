@@ -39,6 +39,8 @@
             append_radio(size_menu, MENU_SIZE_COMPACT, "20 px", settings.size_px == 20);
             append_radio(size_menu, MENU_SIZE_NORMAL, "26 px", settings.size_px == 26);
             append_radio(size_menu, MENU_SIZE_FULL, "32 px", settings.size_px == 32);
+            append_radio(size_menu, MENU_SIZE_LARGE, "48 px", settings.size_px == 48);
+            append_radio(size_menu, MENU_SIZE_XLARGE, "64 px", settings.size_px == 64);
             append_submenu(menu, size_menu, "Cat size");
 
             append_radio(idle_menu, MENU_IDLE_OFF, "0%", approx(settings.idle_threshold, 0.0));
@@ -49,6 +51,8 @@
             append_item(behavior_menu, MENU_SMOOTH, "Smooth speed changes", settings.smooth_speed);
             append_item(behavior_menu, MENU_INVERT, "Invert CPU / speed", settings.invert_speed);
             append_item(behavior_menu, MENU_SLEEP_IDLE, "Sleeping cat when idle", settings.sleep_idle);
+            append_item(behavior_menu, MENU_BATTERY_PAUSE, "Pause animation on battery", settings.pause_on_battery);
+            append_item(behavior_menu, MENU_OVERLAY, "Large overlay (>32 px)", settings.overlay_mode);
             append_submenu(menu, behavior_menu, "Behavior");
 
             AppendMenuW(menu, MF_SEPARATOR, 0, null());
@@ -83,6 +87,8 @@
             if taskbar_created != 0 && msg == taskbar_created {
                 if let Ok(state) = lock.lock() {
                     add_tray_icon(state.hwnd, current_icon(&state));
+                    update_tray_tooltip(&state);
+                    sync_overlay(&state);
                 }
                 return 0;
             }
@@ -93,9 +99,10 @@
                 if w_param == TIMER_ANIMATION {
                     if let Some(lock) = STATE.get() {
                         if let Ok(mut state) = lock.lock() {
-                            if !state.is_idle {
+                            if !state.is_idle && !state.battery_paused {
                                 state.frame = (state.frame + 1) % FRAME_COUNT;
                                 update_tray_icon(state.hwnd, state.icons[state.frame]);
+                                sync_overlay(&state);
 
                                 if state.settings.smooth_speed {
                                     let current = state.animation_ms as f64;
@@ -118,8 +125,12 @@
                         if let Ok(mut state) = lock.lock() {
                             if let Some(cpu) = cpu_usage_and_store(&mut state) {
                                 state.cpu_percent = cpu;
-                                apply_behavior(&mut state, false);
                             }
+                            if let Some(ram) = ram_usage_percent() {
+                                state.ram_percent = ram;
+                            }
+                            state.on_battery = system_on_battery();
+                            apply_behavior(&mut state, false);
                             if state.settings.theme == ThemeMode::Auto {
                                 let _ = rebuild_visuals(&mut state, false);
                             }
@@ -135,6 +146,7 @@
                         if state.settings.theme == ThemeMode::Auto {
                             let _ = rebuild_visuals(&mut state, false);
                         }
+                        sync_overlay(&state);
                     }
                 }
                 return 0;

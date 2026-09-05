@@ -174,6 +174,7 @@
 
     struct AppState {
         hwnd: Hwnd,
+        overlay_hwnd: Hwnd,
         source_frames: Vec<FramePixels>,
         source_sleep: FramePixels,
         icons: [Hicon; FRAME_COUNT],
@@ -183,9 +184,12 @@
         last_kernel: u64,
         last_user: u64,
         cpu_percent: f64,
+        ram_percent: f64,
         animation_ms: Uint,
         target_animation_ms: f64,
         is_idle: bool,
+        on_battery: bool,
+        battery_paused: bool,
         settings: Settings,
         effective_light_theme: bool,
         taskbar_created: Uint,

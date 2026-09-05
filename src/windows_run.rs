@@ -81,7 +81,6 @@
                 menu_name: null(),
                 class_name: class_name.as_ptr(),
             };
-
             if RegisterClassW(&class) == 0 {
                 destroy_icon_set(&icons);
                 DestroyIcon(sleep_icon);
@@ -109,6 +108,26 @@
                 return Err("settings RegisterClassW failed");
             }
 
+            let overlay_class_name = wide("CatCPU.OverlayWindow");
+            let overlay_class = WndClassW {
+                style: 0,
+                wnd_proc: Some(overlay_wnd_proc),
+                cls_extra: 0,
+                wnd_extra: 0,
+                instance,
+                icon: 0,
+                cursor: 0,
+                background: 0,
+                menu_name: null(),
+                class_name: overlay_class_name.as_ptr(),
+            };
+            if RegisterClassW(&overlay_class) == 0 {
+                destroy_icon_set(&icons);
+                DestroyIcon(sleep_icon);
+                GdiplusShutdown(gdiplus_token);
+                return Err("overlay RegisterClassW failed");
+            }
+
             let hwnd = CreateWindowExW(
                 0,
                 class_name.as_ptr(),
@@ -130,19 +149,43 @@
                 return Err("CreateWindowExW failed");
             }
 
+            let overlay_hwnd = CreateWindowExW(
+                WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE,
+                overlay_class_name.as_ptr(),
+                window_name.as_ptr(),
+                WS_POPUP,
+                0,
+                0,
+                1,
+                1,
+                0,
+                0,
+                instance,
+                null_mut(),
+            );
+            if overlay_hwnd == 0 {
+                DestroyWindow(hwnd);
+                destroy_icon_set(&icons);
+                DestroyIcon(sleep_icon);
+                GdiplusShutdown(gdiplus_token);
+                return Err("overlay CreateWindowExW failed");
+            }
+
             let (idle, kernel, user) = read_cpu_times().unwrap_or((0, 0, 0));
             let taskbar_created_name = wide("TaskbarCreated");
             let taskbar_created = RegisterWindowMessageW(taskbar_created_name.as_ptr());
             let initial_interval = target_frame_interval(0.0, settings).round() as Uint;
-
-            let initial_is_idle = should_idle(0.0, settings);
-            let initial_icon = if initial_is_idle && settings.sleep_idle {
+            let on_battery = system_on_battery();
+            let battery_paused = settings.pause_on_battery && on_battery;
+            let initial_is_idle = should_idle(0.0, settings, false);
+            let initial_icon = if (initial_is_idle || battery_paused) && settings.sleep_idle {
                 sleep_icon
             } else {
                 icons[0]
             };
             let state = AppState {
                 hwnd,
+                overlay_hwnd,
                 source_frames,
                 source_sleep,
                 icons,
@@ -152,9 +195,12 @@
                 last_kernel: kernel,
                 last_user: user,
                 cpu_percent: 0.0,
+                ram_percent: ram_usage_percent().unwrap_or(0.0),
                 animation_ms: initial_interval.max(1),
                 target_animation_ms: initial_interval.max(1) as f64,
                 is_idle: initial_is_idle,
+                on_battery,
+                battery_paused,
                 settings,
                 effective_light_theme: light_theme,
                 taskbar_created,
@@ -163,6 +209,7 @@
             };
 
             if let Err(returned) = STATE.set(Mutex::new(state)) {
+                DestroyWindow(overlay_hwnd);
                 DestroyWindow(hwnd);
                 if let Ok(state) = returned.into_inner() {
                     destroy_icon_set(&state.icons);
@@ -175,13 +222,16 @@
             }
 
             if !add_tray_icon(hwnd, initial_icon) {
+                DestroyWindow(overlay_hwnd);
                 DestroyWindow(hwnd);
                 return Err("Shell_NotifyIconW failed");
             }
 
             if let Some(lock) = STATE.get() {
                 if let Ok(state) = lock.lock() {
-                    if !state.is_idle {
+                    update_tray_tooltip(&state);
+                    sync_overlay(&state);
+                    if !state.is_idle && !state.battery_paused {
                         SetTimer(hwnd, TIMER_ANIMATION, state.animation_ms, null());
                     }
                 }
@@ -200,6 +250,9 @@
 
             if let Some(lock) = STATE.get() {
                 if let Ok(state) = lock.lock() {
+                    if state.overlay_hwnd != 0 {
+                        DestroyWindow(state.overlay_hwnd);
+                    }
                     destroy_icon_set(&state.icons);
                     if state.sleep_icon != 0 {
                         DestroyIcon(state.sleep_icon);

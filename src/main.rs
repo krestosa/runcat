@@ -17,6 +17,7 @@ mod windows_app {
     include!("windows_ffi_a.rs");
     include!("windows_ffi_b.rs");
     include!("windows_ffi_c.rs");
+    include!("windows_features.rs");
     include!("windows_core_a.rs");
     include!("windows_core_b.rs");
     include!("windows_core_c.rs");

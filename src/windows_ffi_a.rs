@@ -45,6 +45,8 @@
     const MENU_SIZE_COMPACT: usize = 1300;
     const MENU_SIZE_NORMAL: usize = 1301;
     const MENU_SIZE_FULL: usize = 1302;
+    const MENU_SIZE_LARGE: usize = 1303;
+    const MENU_SIZE_XLARGE: usize = 1304;
     const MENU_IDLE_OFF: usize = 1400;
     const MENU_IDLE_5: usize = 1401;
     const MENU_IDLE_10: usize = 1402;
@@ -52,6 +54,8 @@
     const MENU_SMOOTH: usize = 1500;
     const MENU_INVERT: usize = 1501;
     const MENU_SLEEP_IDLE: usize = 1502;
+    const MENU_BATTERY_PAUSE: usize = 1503;
+    const MENU_OVERLAY: usize = 1504;
     const MENU_RESET: usize = 1900;
     const MENU_EXIT: usize = 1999;
 
@@ -114,6 +118,12 @@
     const CFG_RESET: usize = 2011;
     const CFG_CLOSE: usize = 2012;
     const CFG_STATUS: usize = 2013;
+    const CFG_CURVE: usize = 2014;
+    const CFG_HYSTERESIS: usize = 2015;
+    const CFG_TOOLTIP_CPU: usize = 2016;
+    const CFG_TOOLTIP_RAM: usize = 2017;
+    const CFG_BATTERY_PAUSE: usize = 2018;
+    const CFG_OVERLAY: usize = 2019;
 
     const DIB_RGB_COLORS: Uint = 0;
     const BI_RGB: Dword = 0;
@@ -166,16 +176,48 @@
         }
     }
 
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    enum SpeedCurve {
+        Smooth,
+        Linear,
+        Reactive,
+    }
+
+    impl SpeedCurve {
+        fn as_str(self) -> &'static str {
+            match self {
+                Self::Smooth => "smooth",
+                Self::Linear => "linear",
+                Self::Reactive => "reactive",
+            }
+        }
+
+        fn parse(value: &str) -> Option<Self> {
+            match value {
+                "smooth" => Some(Self::Smooth),
+                "linear" => Some(Self::Linear),
+                "reactive" => Some(Self::Reactive),
+                _ => None,
+            }
+        }
+    }
+
     #[derive(Clone, Copy)]
     struct Settings {
         theme: ThemeMode,
         speed_multiplier: f64,
+        speed_curve: SpeedCurve,
         size_px: u32,
         idle_threshold: f64,
+        idle_hysteresis: f64,
         cpu_sample_ms: Uint,
         smooth_speed: bool,
         invert_speed: bool,
         sleep_idle: bool,
+        tooltip_cpu: bool,
+        tooltip_ram: bool,
+        pause_on_battery: bool,
+        overlay_mode: bool,
     }
 
     impl Default for Settings {
@@ -183,12 +225,18 @@
             Self {
                 theme: ThemeMode::Auto,
                 speed_multiplier: 1.0,
+                speed_curve: SpeedCurve::Smooth,
                 size_px: 32,
                 idle_threshold: 0.0,
+                idle_hysteresis: 2.0,
                 cpu_sample_ms: DEFAULT_CPU_SAMPLE_MS,
                 smooth_speed: true,
                 invert_speed: false,
                 sleep_idle: true,
+                tooltip_cpu: true,
+                tooltip_ram: false,
+                pause_on_battery: false,
+                overlay_mode: false,
             }
         }
     }
@@ -218,9 +266,14 @@
                             }
                         }
                     }
+                    "speed_curve" => {
+                        if let Some(parsed) = SpeedCurve::parse(value) {
+                            settings.speed_curve = parsed;
+                        }
+                    }
                     "size_px" => {
                         if let Ok(parsed) = value.parse::<u32>() {
-                            if (12..=32).contains(&parsed) {
+                            if (12..=64).contains(&parsed) {
                                 settings.size_px = parsed;
                             }
                         }
@@ -230,6 +283,8 @@
                             "compact" => 20,
                             "normal" => 26,
                             "full" => 32,
+                            "large" => 48,
+                            "xlarge" => 64,
                             _ => settings.size_px,
                         };
                     }
@@ -237,6 +292,13 @@
                         if let Ok(parsed) = value.parse::<f64>() {
                             if (0.0..=100.0).contains(&parsed) {
                                 settings.idle_threshold = parsed;
+                            }
+                        }
+                    }
+                    "idle_hysteresis" => {
+                        if let Ok(parsed) = value.parse::<f64>() {
+                            if (0.0..=25.0).contains(&parsed) {
+                                settings.idle_hysteresis = parsed;
                             }
                         }
                     }
@@ -250,6 +312,10 @@
                     "smooth_speed" => settings.smooth_speed = parse_bool(value, true),
                     "invert_speed" => settings.invert_speed = parse_bool(value, false),
                     "sleep_idle" => settings.sleep_idle = parse_bool(value, true),
+                    "tooltip_cpu" => settings.tooltip_cpu = parse_bool(value, true),
+                    "tooltip_ram" => settings.tooltip_ram = parse_bool(value, false),
+                    "pause_on_battery" => settings.pause_on_battery = parse_bool(value, false),
+                    "overlay_mode" => settings.overlay_mode = parse_bool(value, false),
                     _ => {}
                 }
             }
@@ -264,15 +330,21 @@
             }
 
             let text = format!(
-                "theme={}\nspeed_multiplier={:.2}\nsize_px={}\nidle_threshold={:.1}\ncpu_sample_ms={}\nsmooth_speed={}\ninvert_speed={}\nsleep_idle={}\n",
+                "theme={}\nspeed_multiplier={:.2}\nspeed_curve={}\nsize_px={}\nidle_threshold={:.1}\nidle_hysteresis={:.1}\ncpu_sample_ms={}\nsmooth_speed={}\ninvert_speed={}\nsleep_idle={}\ntooltip_cpu={}\ntooltip_ram={}\npause_on_battery={}\noverlay_mode={}\n",
                 self.theme.as_str(),
                 self.speed_multiplier,
+                self.speed_curve.as_str(),
                 self.size_px,
                 self.idle_threshold,
+                self.idle_hysteresis,
                 self.cpu_sample_ms,
                 self.smooth_speed,
                 self.invert_speed,
                 self.sleep_idle,
+                self.tooltip_cpu,
+                self.tooltip_ram,
+                self.pause_on_battery,
+                self.overlay_mode,
             );
             let _ = fs::write(path, text);
         }

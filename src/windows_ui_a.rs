@@ -25,8 +25,8 @@
                 WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
                 CW_USEDEFAULT,
                 CW_USEDEFAULT,
-                530,
-                505,
+                550,
+                650,
                 owner,
                 0,
                 instance,
@@ -159,6 +159,8 @@
             MENU_SIZE_COMPACT => state.settings.size_px = 20,
             MENU_SIZE_NORMAL => state.settings.size_px = 26,
             MENU_SIZE_FULL => state.settings.size_px = 32,
+            MENU_SIZE_LARGE => state.settings.size_px = 48,
+            MENU_SIZE_XLARGE => state.settings.size_px = 64,
             MENU_IDLE_OFF => {
                 state.settings.idle_threshold = 0.0;
                 behavior_changed = true;
@@ -194,6 +196,16 @@
                 behavior_changed = true;
                 force_behavior = true;
             }
+            MENU_BATTERY_PAUSE => {
+                state.settings.pause_on_battery = !state.settings.pause_on_battery;
+                behavior_changed = true;
+                force_behavior = true;
+            }
+            MENU_OVERLAY => {
+                state.settings.overlay_mode = !state.settings.overlay_mode;
+                behavior_changed = true;
+                force_behavior = true;
+            }
             MENU_RESET => {
                 state.settings = Settings::default();
                 state.settings.save();
@@ -215,7 +227,7 @@
         if state.settings.theme != previous_theme || state.settings.size_px != previous_size {
             let _ = rebuild_visuals(&mut state, true);
         }
-        if behavior_changed {
+        if behavior_changed || state.settings.size_px != previous_size {
             apply_behavior(&mut state, force_behavior);
         }
         drop(state);

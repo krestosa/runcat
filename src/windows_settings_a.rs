@@ -1,14 +1,14 @@
     fn restart_animation_timer(state: &mut AppState, interval: Uint) {
         unsafe {
             KillTimer(state.hwnd, TIMER_ANIMATION);
-            if !state.is_idle {
+            if !state.is_idle && !state.battery_paused {
                 SetTimer(state.hwnd, TIMER_ANIMATION, interval.max(1), null());
             }
         }
     }
 
     fn current_icon(state: &AppState) -> Hicon {
-        if state.is_idle && state.settings.sleep_idle {
+        if (state.is_idle || state.battery_paused) && state.settings.sleep_idle {
             state.sleep_icon
         } else {
             state.icons[state.frame]
@@ -21,9 +21,10 @@
             state.animation_ms = state.target_animation_ms.round().clamp(1.0, u32::MAX as f64) as Uint;
         }
 
-        let next_idle = should_idle(state.cpu_percent, state.settings);
-        if next_idle {
-            state.is_idle = true;
+        state.battery_paused = state.settings.pause_on_battery && state.on_battery;
+        let next_idle = should_idle(state.cpu_percent, state.settings, state.is_idle);
+        if next_idle || state.battery_paused {
+            state.is_idle = next_idle;
             state.frame = 0;
             unsafe {
                 KillTimer(state.hwnd, TIMER_ANIMATION);
@@ -38,6 +39,8 @@
                 restart_animation_timer(state, interval);
             }
         }
+        update_tray_tooltip(state);
+        sync_overlay(state);
     }
 
     fn rebuild_visuals(state: &mut AppState, force: bool) -> Result<(), &'static str> {
@@ -63,6 +66,8 @@
         let old_sleep = std::mem::replace(&mut state.sleep_icon, new_sleep);
         state.effective_light_theme = next_light;
         update_tray_icon(state.hwnd, current_icon(state));
+        update_tray_tooltip(state);
+        sync_overlay(state);
         destroy_icon_set(&old_icons);
         unsafe {
             if old_sleep != 0 {

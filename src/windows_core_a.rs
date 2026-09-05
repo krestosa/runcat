@@ -50,14 +50,24 @@
             utilization = 1.0 - utilization;
         }
 
-        // Same feel as current GNOME RunCat, independently implemented:
-        // one full five-frame cycle ranges from about 1100 ms at idle to 250 ms at full CPU.
-        let cycle_ms = 250.0 + 850.0 * (1.0 - utilization).powi(2);
+        let remaining = 1.0 - utilization;
+        let cycle_ms = match settings.speed_curve {
+            SpeedCurve::Smooth => 250.0 + 850.0 * remaining.powi(2),
+            SpeedCurve::Linear => 250.0 + 850.0 * remaining,
+            SpeedCurve::Reactive => 250.0 + 850.0 * remaining.powi(3),
+        };
         (cycle_ms / FRAME_COUNT as f64 / settings.speed_multiplier).clamp(10.0, 2000.0)
     }
 
-    fn should_idle(cpu_percent: f64, settings: Settings) -> bool {
-        !settings.invert_speed && cpu_percent <= settings.idle_threshold
+    fn should_idle(cpu_percent: f64, settings: Settings, currently_idle: bool) -> bool {
+        if settings.invert_speed {
+            return false;
+        }
+        if currently_idle {
+            cpu_percent <= (settings.idle_threshold + settings.idle_hysteresis).min(100.0)
+        } else {
+            cpu_percent <= settings.idle_threshold
+        }
     }
 
     unsafe fn release_stream(stream: *mut Unknown) {
