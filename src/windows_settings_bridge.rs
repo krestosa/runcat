@@ -1,15 +1,22 @@
     const SETTINGS_CHANGED_MESSAGE: Uint = WM_APP + 50;
 
-    fn launch_modern_settings(owner: Hwnd) {
-        let executable = std::env::current_exe()
+    fn settings_executable() -> Option<PathBuf> {
+        std::env::current_exe()
             .ok()
-            .map(|path| path.with_file_name("catcpu-settings.exe"));
-        let Some(executable) = executable else {
+            .map(|path| path.with_file_name("catcpu-settings.exe"))
+    }
+
+    fn launch_settings_process(owner: Hwnd, tray_quick: bool) {
+        let Some(executable) = settings_executable() else {
             unsafe { warn_settings(owner, "Could not resolve catcpu-settings.exe."); }
             return;
         };
 
-        if std::process::Command::new(&executable).spawn().is_err() {
+        let mut command = std::process::Command::new(&executable);
+        if tray_quick {
+            command.arg("--tray");
+        }
+        if command.spawn().is_err() {
             unsafe {
                 warn_settings(
                     owner,
@@ -17,6 +24,14 @@
                 );
             }
         }
+    }
+
+    fn launch_modern_settings(owner: Hwnd) {
+        launch_settings_process(owner, false);
+    }
+
+    fn launch_tray_quick_settings(owner: Hwnd) {
+        launch_settings_process(owner, true);
     }
 
     fn apply_external_settings_update() {
